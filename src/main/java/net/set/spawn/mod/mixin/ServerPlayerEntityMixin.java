@@ -2,9 +2,10 @@ package net.set.spawn.mod.mixin;
 
 import com.mojang.authlib.GameProfile;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.entity.player.ServerPlayerEntity;
 import net.minecraft.screen.ScreenHandlerListener;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.server.network.ServerPlayerInteractionManager;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.MathHelper;
@@ -23,11 +24,12 @@ public abstract class ServerPlayerEntityMixin extends PlayerEntity implements Sc
 
     @Shadow @Final public MinecraftServer server;
 
-    public ServerPlayerEntityMixin(World world, BlockPos pos, float yaw, GameProfile profile) {
-        super(world, pos, yaw, profile);
+    public ServerPlayerEntityMixin(World world, GameProfile profile) {
+        super(world, profile);
     }
-    @Inject(method = "moveToSpawn", at = @At("HEAD"), cancellable = true)
-    public void setspawnmod_setSpawn(ServerWorld world, CallbackInfo ci) {
+
+    @Inject(method = "<init>", at = @At(value = "INVOKE", target = "Lnet/minecraft/entity/player/ServerPlayerEntity;refreshPositionAndAngles(Lnet/minecraft/util/math/BlockPos;FF)V", shift = At.Shift.AFTER))
+    public void setspawnmod_setSpawn(MinecraftServer server, ServerWorld world, GameProfile profile, ServerPlayerInteractionManager interactionManager, CallbackInfo ci) {
         if (SetSpawn.shouldModifySpawn) {
             SetSpawn.shouldModifySpawn = false;
             Seed seedObject = SetSpawn.findSeedObjectFromLong(world.getSeed());
@@ -35,20 +37,20 @@ public abstract class ServerPlayerEntityMixin extends PlayerEntity implements Sc
             if (seedObject != null ) {
                 int xFloor = MathHelper.floor(seedObject.getX());
                 int zFloor = MathHelper.floor(seedObject.getZ());
-                if ((Math.abs(xFloor - world.getSpawnPos().getX()) > this.server.getSpawnRadius(world))
-                        || (Math.abs(zFloor - world.getSpawnPos().getZ()) > this.server.getSpawnRadius(world))) {
+                if ((Math.abs(xFloor - world.getSpawnPos().getX()) > this.server.method_12834(world))
+                        || (Math.abs(zFloor - world.getSpawnPos().getZ()) > this.server.method_12834(world))) {
                     SetSpawn.shouldSendErrorMessage = true;
                     response = "The X or Z coordinates given (" + seedObject.getX() + ", " + seedObject.getZ() + ") are more than 10 blocks away from the world spawn. Not overriding player spawnpoint.";
                     SetSpawn.errorMessage = response;
                     SetSpawn.LOGGER.warn(response);
                 } else {
-                    BlockPos spawnPos = SpawnLocatingAccessor.callFindOverworldSpawn(world, xFloor, zFloor, false);
-                    if (spawnPos != null) {
+                    BlockPos samplePos = new BlockPos(xFloor, 0, zFloor);
+                    BlockPos spawnPos = world.getTopPosition(samplePos);
+                    if (spawnPos != samplePos) {
                         this.refreshPositionAndAngles(spawnPos, 0.0F, 0.0F);
-                        if (world.isSpaceEmpty(this)) {
+                        if (world.doesBoxCollide(this, this.getBoundingBox()).isEmpty()) {
                             SetSpawn.shouldSendErrorMessage = false;
                             SetSpawn.LOGGER.info("Spawning player at: " + seedObject.getX() + " " + spawnPos.getY() + " " + seedObject.getZ());
-                            ci.cancel();
                         } else {
                             SetSpawn.shouldSendErrorMessage = true;
                             response = "The coordinates given (" + seedObject.getX() + ", " + seedObject.getZ() + ") are obstructed by blocks. Not overriding player spawnpoint.";

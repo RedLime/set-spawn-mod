@@ -6,8 +6,7 @@
   "mixins": [
     "MinecraftServerMixin",
     "PlayerManagerMixin",
-    "ServerPlayerEntityMixin",
-    "SpawnLocatingAccessor"
+    "ServerPlayerEntityMixin"
   ],
   "injectors": {
     "defaultRequire": 1
